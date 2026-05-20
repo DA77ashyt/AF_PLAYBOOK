@@ -1,0 +1,2374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>美式橄榄球战术板</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; user-select: none; }
+
+  /* Top bar */
+  .top-bar { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: #16213e; border-bottom: 2px solid #0f3460; flex-shrink: 0; }
+  .top-bar h1 { font-size: 18px; color: #e94560; margin-right: 16px; white-space: nowrap; }
+  .mode-btn { padding: 6px 16px; border: 2px solid #0f3460; background: #1a1a2e; color: #e0e0e0; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+  .mode-btn:hover { border-color: #e94560; }
+  .mode-btn.active { background: #e94560; border-color: #e94560; color: #fff; }
+  .color-picker-wrap { display: flex; align-items: center; gap: 6px; }
+  .color-picker-wrap label { font-size: 12px; color: #aaa; }
+  #routeColor { width: 32px; height: 28px; border: none; cursor: pointer; background: none; }
+  .sep { width: 1px; height: 24px; background: #0f3460; }
+  .action-btn { padding: 6px 14px; border: 1px solid #533483; background: transparent; color: #e0e0e0; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+  .action-btn:hover { background: #533483; }
+
+  /* Main area */
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* Left panel */
+  .left-panel { width: 200px; background: #16213e; border-right: 2px solid #0f3460; overflow-y: auto; flex-shrink: 0; display: flex; flex-direction: column; }
+  .panel-section { padding: 10px; border-bottom: 1px solid #0f3460; }
+  .panel-section h3 { font-size: 13px; color: #e94560; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+  .player-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .player-chip { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 6px; cursor: grab; transition: transform 0.15s, box-shadow 0.15s; border: 2px solid transparent; }
+  .player-chip:hover { transform: scale(1.05); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+  .player-chip:active { cursor: grabbing; }
+  .player-dot { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px; color: #fff; }
+  .player-label { font-size: 10px; color: #ccc; }
+  .template-btn { width: 100%; padding: 6px 8px; margin-bottom: 4px; border: 1px solid #0f3460; background: #1a1a2e; color: #e0e0e0; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left; transition: all 0.2s; }
+  .template-btn:hover { background: #533483; border-color: #533483; }
+
+  /* Canvas area */
+  .canvas-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+  #fieldCanvas { flex: 1; display: block; cursor: default; }
+  #fieldCanvas.dragging { cursor: grabbing; }
+  #fieldCanvas.route-mode { cursor: crosshair; }
+  #fieldCanvas.draw-mode { cursor: crosshair; }
+  #fieldCanvas.zone-mode { cursor: crosshair; }
+  #fieldCanvas.text-mode { cursor: text; }
+  #fieldCanvas.erase-mode { cursor: pointer; }
+  #fieldCanvas.pen-mode { cursor: crosshair; }
+
+  /* Text input overlay */
+  .text-input-overlay { position: fixed; z-index: 9999; background: rgba(0,0,0,0.85); border: 2px solid #0096ff; border-radius: 4px; padding: 6px 10px; color: #fff; outline: none; min-width: 120px; font-family: sans-serif; }
+  .text-input-overlay::placeholder { color: rgba(255,255,255,0.4); }
+
+  /* Status bar */
+  .status-bar { padding: 6px 16px; background: #16213e; border-top: 1px solid #0f3460; font-size: 12px; color: #aaa; display: flex; justify-content: space-between; flex-shrink: 0; }
+  .status-bar .keys { color: #666; }
+  .status-bar .keys kbd { background: #1a1a2e; border: 1px solid #333; border-radius: 3px; padding: 1px 5px; font-size: 11px; color: #ccc; }
+
+  /* Drag ghost */
+  .drag-ghost { position: fixed; pointer-events: none; z-index: 9999; opacity: 0.8; }
+  .drag-ghost .player-dot { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="top-bar">
+  <h1>Football Tactics</h1>
+  <button class="mode-btn active" data-mode="select" title="选择模式">选择 <kbd>S</kbd></button>
+  <button class="mode-btn" data-mode="route" title="画路线模式">画路线 <kbd>D</kbd></button>
+  <button class="mode-btn" data-mode="draw" title="自由绘制模式">自由绘制 <kbd>F</kbd></button>
+  <button class="mode-btn" data-mode="zone" title="区域模式">区域 <kbd>A</kbd></button>
+  <button class="mode-btn" data-mode="pen" title="画笔模式 - 自由绘制">画笔 <kbd>P</kbd></button>
+  <button class="mode-btn" data-mode="erase" title="擦除模式">擦除 <kbd>E</kbd></button>
+  <div class="sep"></div>
+  <div class="color-picker-wrap">
+    <label>路线颜色</label>
+    <input type="color" id="routeColor" value="#00ff88">
+  </div>
+  <div class="color-picker-wrap">
+    <label>区域颜色</label>
+    <input type="color" id="zoneColorPicker" value="#0096ff">
+  </div>
+  <div class="sep"></div>
+  <button class="mode-btn" id="lineStyleToggle" title="实线/虚线切换 (L)">实线</button>
+  <button class="mode-btn" id="curveToggle" title="折线/曲线切换">折线</button>
+  <button class="mode-btn" id="zoneShapeToggle" title="矩形/多边形切换 (R)">矩形</button>
+  <button class="mode-btn" id="finishRouteBtn" title="完成 (Enter)">完成</button>
+  <div class="sep"></div>
+  <div class="color-picker-wrap">
+    <label>球员大小</label>
+    <input type="number" id="playerSizeInput" value="16" min="10" max="40" style="width:48px;height:28px;background:#1a1a2e;color:#e0e0e0;border:1px solid #0f3460;border-radius:3px;text-align:center;font-size:12px;">
+  </div>
+  <div class="color-picker-wrap">
+    <label>字号</label>
+    <input type="number" id="fontSizeInput" value="14" min="8" max="40" style="width:48px;height:28px;background:#1a1a2e;color:#e0e0e0;border:1px solid #0f3460;border-radius:3px;text-align:center;font-size:12px;">
+  </div>
+  <button class="mode-btn" data-mode="text" title="添加文字 (T)">文字 <kbd>T</kbd></button>
+  <div class="sep"></div>
+  <button class="action-btn" id="alignOlBtn" title="OL一键上线 (O)">OL上线</button>
+  <button class="action-btn" id="exportBtn" title="导出PNG">导出 PNG</button>
+  <button class="action-btn" id="clearPenBtn" title="清除所有笔迹">清除笔迹</button>
+  <button class="action-btn" id="clearBtn" title="清空所有">清空</button>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <!-- Left panel -->
+  <div class="left-panel">
+    <div class="panel-section">
+      <h3>进攻球员</h3>
+      <div class="player-grid" id="offensePlayers"></div>
+    </div>
+    <div class="panel-section">
+      <h3>防守球员</h3>
+      <div class="player-grid" id="defensePlayers"></div>
+    </div>
+    <div class="panel-section">
+      <h3>进攻阵型</h3>
+      <div id="offenseTemplates"></div>
+    </div>
+    <div class="panel-section">
+      <h3>防守阵型</h3>
+      <div id="defenseTemplates"></div>
+    </div>
+  </div>
+
+  <!-- Canvas -->
+  <div class="canvas-wrap">
+    <canvas id="fieldCanvas"></canvas>
+  </div>
+</div>
+
+<!-- Status bar -->
+<div class="status-bar">
+  <span id="statusText">就绪 — 从左侧拖拽球员到场地</span>
+  <span class="keys"><kbd>S</kbd>选择 <kbd>D</kbd>画路线 <kbd>F</kbd>自由绘制 <kbd>A</kbd>区域 <kbd>P</kbd>画笔 <kbd>T</kbd>文字 <kbd>E</kbd>擦除 <kbd>L</kbd>虚线/实线 <kbd>O</kbd>OL上线 <kbd>R</kbd>矩形/多边形 <kbd>+/-</kbd>球员大小 <kbd>Enter</kbd>完成 <kbd>Esc</kbd>取消 <kbd>Del</kbd>删除</span>
+</div>
+
+<script>
+// ==================== DATA ====================
+const POS_COLORS = {
+  QB: '#2196F3', RB: '#FF9800', WR: '#4CAF50', TE: '#f44336', OL: '#FFC107',
+  DL: '#9C27B0', LB: '#00BCD4', CB: '#795548', S: '#E91E63'
+};
+
+const OFFENSE_TYPES = ['QB', 'RB', 'WR', 'TE', 'OL'];
+const DEFENSE_TYPES = ['DL', 'LB', 'CB', 'S'];
+
+// Field dimensions in game units: 100 yards between end zone lines, +20 each side for endzones
+// We use a coordinate system: x=0..fieldWidth, y=0..fieldHeight
+// Field: y from 1 to 99 (100 yards), endzones at y=0 and y=100
+const YARD_TO_Y = 10; // pixels per yard vertically
+const ENDZONE_HEIGHT = 20 * YARD_TO_Y; // 20 yards = 200px
+const FIELD_HEIGHT = 100 * YARD_TO_Y; // 100 yards = 1000px
+const FIELD_LEFT_MARGIN = 60; // space for yard numbers
+const FIELD_RIGHT_MARGIN = 60;
+const HASH_OFFSET_PCT = 0.4; // hash marks are at 40% and 60% of width
+
+// Formations: positions as {x, y} in percentage (0-100, 0-100) relative to field area
+// x: 0=left sideline, 100=right sideline
+// y: 100=offense goal line (bottom), 0=defense goal line (top)
+// Offense attacks from bottom (y=100) to top (y=0)
+const OFFENSE_FORMATIONS = {
+  'I-Formation': {
+    label: 'I阵型',
+    players: [
+      { type: 'QB', x: 50, y: 75 },
+      { type: 'FB', x: 50, y: 80 },
+      { type: 'HB', x: 50, y: 88 },
+      { type: 'LT', x: 42, y: 70 },
+      { type: 'LG', x: 46, y: 70 },
+      { type: 'C',  x: 50, y: 70 },
+      { type: 'RG', x: 54, y: 70 },
+      { type: 'RT', x: 58, y: 70 },
+      { type: 'LWR', x: 10, y: 70 },
+      { type: 'RWR', x: 90, y: 70 },
+      { type: 'TE', x: 38, y: 70 },
+    ]
+  },
+  'Shotgun': {
+    label: '猎枪阵型',
+    players: [
+      { type: 'QB', x: 50, y: 85 },
+      { type: 'RB', x: 50, y: 92 },
+      { type: 'LT', x: 42, y: 80 },
+      { type: 'LG', x: 46, y: 80 },
+      { type: 'C',  x: 50, y: 80 },
+      { type: 'RG', x: 54, y: 80 },
+      { type: 'RT', x: 58, y: 80 },
+      { type: 'LWR', x: 8, y: 80 },
+      { type: 'MWR', x: 40, y: 85 },
+      { type: 'RWR', x: 92, y: 80 },
+      { type: 'TE', x: 62, y: 80 },
+    ]
+  },
+  'Singleback': {
+    label: '单跑卫',
+    players: [
+      { type: 'QB', x: 50, y: 85 },
+      { type: 'RB', x: 65, y: 92 },
+      { type: 'LT', x: 42, y: 80 },
+      { type: 'LG', x: 46, y: 80 },
+      { type: 'C',  x: 50, y: 80 },
+      { type: 'RG', x: 54, y: 80 },
+      { type: 'RT', x: 58, y: 80 },
+      { type: 'LWR', x: 6, y: 80 },
+      { type: 'MWR', x: 88, y: 80 },
+      { type: 'RWR', x: 94, y: 80 },
+      { type: 'TE', x: 36, y: 80 },
+    ]
+  },
+  'Empty': {
+    label: '空后场',
+    players: [
+      { type: 'QB', x: 50, y: 85 },
+      { type: 'LT', x: 42, y: 80 },
+      { type: 'LG', x: 46, y: 80 },
+      { type: 'C',  x: 50, y: 80 },
+      { type: 'RG', x: 54, y: 80 },
+      { type: 'RT', x: 58, y: 80 },
+      { type: 'LWR', x: 5, y: 80 },
+      { type: 'MLWR', x: 25, y: 86 },
+      { type: 'MRWR', x: 75, y: 86 },
+      { type: 'RWR', x: 95, y: 80 },
+      { type: 'TE', x: 60, y: 80 },
+    ]
+  }
+};
+
+// Defense formations: y values are offsets from LOS (negative = toward defense goal line)
+// Base positions: DL at LOS-10, LB at LOS-20, CB at LOS-30, S at LOS-40
+const DEFENSE_FORMATIONS = {
+  '4-3 Defense': {
+    label: '4-3 防守',
+    players: [
+      { type: 'NT', x: 50, yOff: -10 },
+      { type: 'LE', x: 35, yOff: -10 },
+      { type: 'RE', x: 65, yOff: -10 },
+      { type: 'LT', x: 20, yOff: -10 },
+      { type: 'RT', x: 80, yOff: -10 },
+      { type: 'MLB', x: 50, yOff: -20 },
+      { type: 'LLB', x: 35, yOff: -20 },
+      { type: 'RLB', x: 65, yOff: -20 },
+      { type: 'LCB', x: 15, yOff: -30 },
+      { type: 'RCB', x: 85, yOff: -30 },
+      { type: 'FS', x: 40, yOff: -40 },
+      { type: 'SS', x: 60, yOff: -40 },
+    ]
+  },
+  '3-4 Defense': {
+    label: '3-4 防守',
+    players: [
+      { type: 'NT', x: 50, yOff: -10 },
+      { type: 'LE', x: 35, yOff: -10 },
+      { type: 'RE', x: 65, yOff: -10 },
+      { type: 'LDE', x: 20, yOff: -10 },
+      { type: 'RDE', x: 80, yOff: -10 },
+      { type: 'MLB', x: 50, yOff: -20 },
+      { type: 'LLB', x: 35, yOff: -20 },
+      { type: 'RLB', x: 65, yOff: -20 },
+      { type: 'SLB', x: 50, yOff: -25 },
+      { type: 'LCB', x: 15, yOff: -30 },
+      { type: 'RCB', x: 85, yOff: -30 },
+      { type: 'FS', x: 40, yOff: -40 },
+      { type: 'SS', x: 60, yOff: -40 },
+    ]
+  },
+  'Nickel': {
+    label: '五分卫',
+    players: [
+      { type: 'NT', x: 50, yOff: -10 },
+      { type: 'LE', x: 35, yOff: -10 },
+      { type: 'RE', x: 65, yOff: -10 },
+      { type: 'LT', x: 20, yOff: -10 },
+      { type: 'RT', x: 80, yOff: -10 },
+      { type: 'MLB', x: 50, yOff: -20 },
+      { type: 'LLB', x: 35, yOff: -20 },
+      { type: 'RLB', x: 65, yOff: -20 },
+      { type: 'LCB', x: 10, yOff: -30 },
+      { type: 'RCB', x: 90, yOff: -30 },
+      { type: 'NB', x: 50, yOff: -25 },
+      { type: 'FS', x: 40, yOff: -40 },
+      { type: 'SS', x: 60, yOff: -40 },
+    ]
+  },
+  'Dime': {
+    label: '六分卫',
+    players: [
+      { type: 'NT', x: 50, yOff: -10 },
+      { type: 'LE', x: 35, yOff: -10 },
+      { type: 'RE', x: 65, yOff: -10 },
+      { type: 'LT', x: 20, yOff: -10 },
+      { type: 'RT', x: 80, yOff: -10 },
+      { type: 'MLB', x: 50, yOff: -20 },
+      { type: 'LLB', x: 35, yOff: -20 },
+      { type: 'RLB', x: 65, yOff: -20 },
+      { type: 'LCB', x: 8, yOff: -30 },
+      { type: 'MLCB', x: 30, yOff: -30 },
+      { type: 'MRCB', x: 70, yOff: -30 },
+      { type: 'RCB', x: 92, yOff: -30 },
+      { type: 'FS', x: 45, yOff: -40 },
+      { type: 'SS', x: 55, yOff: -40 },
+    ]
+  }
+};
+
+// ==================== STATE ====================
+let state = {
+  mode: 'select', // 'select', 'route', 'draw', 'zone', 'text', 'erase'
+  players: [],    // { id, type, x, y, isOffense, color, size }
+  routes: [],     // { id, playerId, points: [{x,y}], color, dashed }
+  zones: [],      // { id, shape: 'rect'|'polygon', points: [{x,y}], color, label, fontSize }
+  texts: [],      // { id, x, y, text, fontSize, color }
+  penStrokes: [], // { id, points: [{x,y}], color, width }
+  selectedPlayerId: null,
+  selectedPlayerIds: [], // batch selection
+  selectedRouteId: null,
+  selectedZoneId: null,
+  selectedTextId: null,
+  draggingZoneVertex: null, // { zoneId, vertexIndex }
+  selectionRect: null, // { x1, y1, x2, y2 } screen coords for rubber band
+  routeColor: '#00ff88',
+  zoneColor: '#0096ff',
+  zoneShape: 'rect', // 'rect' or 'polygon'
+  playerSize: 16,
+  fontSize: 14,
+  useCurve: false,
+  useDashed: false,
+  drawingRoute: null,
+  drawingZone: null, // { shape, points: [{x,y}], startPoint }
+  nextId: 1,
+  fieldRect: { left: 0, top: 0, width: 0, height: 0 },
+  losY: 70, // Line of Scrimmage - offense attacks upward (y decreases)
+};
+
+// ==================== CANVAS ====================
+const canvas = document.getElementById('fieldCanvas');
+const ctx = canvas.getContext('2d');
+let dpr = window.devicePixelRatio || 1;
+
+function resizeCanvas() {
+  const wrap = canvas.parentElement;
+  const w = wrap.clientWidth;
+  const h = wrap.clientHeight;
+  dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  state.fieldRect = { left: 0, top: 0, width: w, height: h };
+  draw();
+}
+
+window.addEventListener('resize', resizeCanvas);
+
+// ==================== FIELD DRAWING ====================
+function getFieldArea() {
+  const { width, height } = state.fieldRect;
+  const totalH = ENDZONE_HEIGHT * 2 + FIELD_HEIGHT;
+  let canvasH = height;
+  let scale = 1;
+  if (totalH > canvasH) {
+    scale = canvasH / totalH;
+    canvasH = totalH * scale;
+  }
+  const marginTop = (height - canvasH) / 2;
+  const marginLeft = FIELD_LEFT_MARGIN;
+  const marginRight = FIELD_RIGHT_MARGIN;
+  const fieldW = width - marginLeft - marginRight;
+  return {
+    marginLeft, marginTop, fieldW, canvasH, scale,
+    endzoneH: ENDZONE_HEIGHT * scale,
+    fieldH: FIELD_HEIGHT * scale,
+    totalH: canvasH,
+    // Field area in screen coords
+    fieldTop: marginTop + ENDZONE_HEIGHT * scale,
+    fieldBottom: marginTop + ENDZONE_HEIGHT * scale + FIELD_HEIGHT * scale,
+    fieldLeft: marginLeft,
+    fieldRight: width - marginRight,
+  };
+}
+
+function fieldToScreen(xPct, yPct, fa) {
+  // xPct: 0-100 across field width, yPct: 0-100 down field area (not endzones)
+  const sx = fa.fieldLeft + (xPct / 100) * fa.fieldW;
+  const sy = fa.fieldTop + (yPct / 100) * fa.fieldH;
+  return [sx, sy];
+}
+
+function screenToField(sx, sy, fa) {
+  const xPct = ((sx - fa.fieldLeft) / fa.fieldW) * 100;
+  const yPct = ((sy - fa.fieldTop) / fa.fieldH) * 100;
+  return [xPct, yPct];
+}
+
+function draw() {
+  const { width, height } = state.fieldRect;
+  const fa = getFieldArea();
+
+  // Clear
+  ctx.fillStyle = '#2d5a27';
+  ctx.fillRect(0, 0, width, height);
+
+  // End zones
+  ctx.fillStyle = '#1e4d2b';
+  ctx.fillRect(fa.fieldLeft, fa.marginTop, fa.fieldW, fa.endzoneH);
+  ctx.fillRect(fa.fieldLeft, fa.fieldBottom, fa.fieldW, fa.endzoneH);
+
+  // End zone text
+  ctx.save();
+  ctx.font = 'bold 16px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('END ZONE', fa.fieldLeft + fa.fieldW / 2, fa.marginTop + fa.endzoneH / 2);
+  ctx.fillText('END ZONE', fa.fieldLeft + fa.fieldW / 2, fa.fieldBottom + fa.endzoneH / 2);
+  ctx.restore();
+
+  // Field
+  ctx.fillStyle = '#2d5a27';
+  ctx.fillRect(fa.fieldLeft, fa.fieldTop, fa.fieldW, fa.fieldH);
+
+  // Yard lines
+  for (let i = 0; i <= 10; i++) {
+    const yPct = i * 10;
+    const [, y] = fieldToScreen(0, yPct, fa);
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(fa.fieldLeft, y);
+    ctx.lineTo(fa.fieldRight, y);
+    ctx.stroke();
+
+    // Yard numbers
+    const yardNum = i <= 5 ? i * 10 : 60 - i * 10;
+    const num = i === 0 || i === 10 ? 'GOAL' : String(yardNum);
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (i % 2 === 0 && i > 0 && i < 10) {
+      ctx.fillText(num, fa.fieldLeft + 20, y);
+      ctx.fillText(num, fa.fieldRight - 20, y);
+    }
+  }
+
+  // Hash marks
+  for (let i = 0; i < 100; i++) {
+    const [, y] = fieldToScreen(0, i, fa);
+    const isBig = i % 5 === 0;
+    if (isBig) continue; // already drawn as yard line
+    const hashW = 6;
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    // Left hash
+    ctx.beginPath();
+    ctx.moveTo(fa.fieldLeft + fa.fieldW * (1 - HASH_OFFSET_PCT), y);
+    ctx.lineTo(fa.fieldLeft + fa.fieldW * (1 - HASH_OFFSET_PCT) + hashW, y);
+    ctx.stroke();
+    // Right hash
+    ctx.beginPath();
+    ctx.moveTo(fa.fieldLeft + fa.fieldW * HASH_OFFSET_PCT, y);
+    ctx.lineTo(fa.fieldLeft + fa.fieldW * HASH_OFFSET_PCT + hashW, y);
+    ctx.stroke();
+  }
+
+  // Sidelines
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(fa.fieldLeft, fa.fieldTop, fa.fieldW, fa.fieldH);
+
+  // LOS line
+  const losPct = state.losY;
+  const [, losY] = fieldToScreen(0, losPct, fa);
+  ctx.setLineDash([8, 4]);
+  ctx.strokeStyle = '#ff6b35';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(fa.fieldLeft, losY);
+  ctx.lineTo(fa.fieldRight, losY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // LOS label
+  ctx.font = '10px sans-serif';
+  ctx.fillStyle = '#ff6b35';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('LOS', fa.fieldLeft + 4, losY - 3);
+
+  // Draw routes
+  state.routes.forEach(route => {
+    drawRoute(route, fa, route.useCurve);
+  });
+
+  // Draw current route being drawn
+  if (state.drawingRoute) {
+    const dr = state.drawingRoute;
+    if (dr.points.length >= 2) {
+      drawRoute({ points: dr.points, color: state.routeColor, isPreview: true, dashed: state.useDashed }, fa, state.useCurve);
+    }
+    // Draw preview line from last point to mouse cursor
+    if (dr.points.length >= 1 && state._mousePos) {
+      const lastPt = dr.points[dr.points.length - 1];
+      const [fx, fy] = fieldToScreen(lastPt.x, lastPt.y, fa);
+      const [mx, my] = state._mousePos;
+      ctx.save();
+      const previewDash = state.useDashed ? [6, 4] : [4, 4];
+      ctx.setLineDash(previewDash);
+      ctx.strokeStyle = state.routeColor;
+      ctx.globalAlpha = 0.5;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(fx, fy);
+      ctx.lineTo(mx, my);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // Draw pen strokes
+  drawPenStrokes(fa);
+
+  // Draw zones
+  drawZones(fa);
+
+  // Draw rubber band selection rectangle
+  if (state.selectionRect && isSelecting) {
+    const r = state.selectionRect;
+    const x = Math.min(r.x1, r.x2);
+    const y = Math.min(r.y1, r.y2);
+    const w = Math.abs(r.x2 - r.x1);
+    const h = Math.abs(r.y2 - r.y1);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x, y, w, h);
+    ctx.restore();
+  }
+
+  // Draw players
+  state.players.forEach(p => {
+    drawPlayer(p, fa);
+  });
+
+  // Draw text annotations (on top of everything)
+  drawTexts(fa);
+}
+
+function drawZones(fa) {
+  // Draw saved zones
+  state.zones.forEach(zone => {
+    drawZone(zone, fa, false);
+  });
+  // Draw zone being drawn
+  if (state.drawingZone) {
+    drawZone(state.drawingZone, fa, true);
+  }
+}
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function drawZone(zone, fa, isPreview) {
+  const pts = zone.points.map(p => fieldToScreen(p.x, p.y, fa));
+  if (pts.length < 2) return;
+
+  const hex = zone.color || '#0096ff';
+  const isSelected = state.selectedZoneId === zone.id && !isPreview;
+  ctx.save();
+  ctx.globalAlpha = isPreview ? 0.3 : 0.5;
+  ctx.fillStyle = hexToRgba(hex, 0.15);
+  ctx.strokeStyle = hexToRgba(hex, 0.8);
+  ctx.lineWidth = isPreview ? 1.5 : (isSelected ? 2.5 : 2);
+  ctx.setLineDash(isPreview ? [4, 4] : []);
+
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  if (zone.shape === 'rect' && pts.length === 2) {
+    const [x1, y1] = pts[0];
+    const [x2, y2] = pts[1];
+    ctx.rect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+  } else {
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo(pts[i][0], pts[i][1]);
+    }
+    if (!isPreview) ctx.closePath();
+  }
+  ctx.fill();
+  ctx.stroke();
+
+  if (zone.label && !isPreview) {
+    let cx = 0, cy = 0;
+    pts.forEach(p => { cx += p[0]; cy += p[1]; });
+    cx /= pts.length;
+    cy /= pts.length;
+
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#fff';
+    ctx.font = `bold ${zone.fontSize || 14}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 3;
+    ctx.fillText(zone.label, cx, cy);
+  }
+
+  // Draw vertices when selected
+  if (isSelected) {
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+    pts.forEach((pt, i) => {
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = hex;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(pt[0], pt[1], 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+  }
+
+  ctx.restore();
+}
+
+function drawTexts(fa) {
+  state.texts.forEach(t => {
+    const [sx, sy] = fieldToScreen(t.x, t.y, fa);
+    ctx.save();
+    ctx.fillStyle = t.color || '#fff';
+    ctx.font = `bold ${t.fontSize || 14}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 3;
+    ctx.fillText(t.text, sx, sy);
+    // Selection highlight
+    if (state.selectedTextId === t.id) {
+      const metrics = ctx.measureText(t.text);
+      const w = metrics.width + 8;
+      const h = (t.fontSize || 14) + 6;
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(sx - w / 2, sy - h / 2, w, h);
+    }
+    ctx.restore();
+  });
+}
+
+function drawPenStrokes(fa) {
+  state.penStrokes.forEach(stroke => {
+    const pts = stroke.points.map(p => fieldToScreen(p.x, p.y, fa));
+    if (pts.length < 2) return;
+    ctx.save();
+    ctx.strokeStyle = stroke.color || '#fff';
+    ctx.lineWidth = stroke.width || 3;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    if (pts.length === 2) {
+      ctx.lineTo(pts[1][0], pts[1][1]);
+    } else {
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[Math.max(i - 1, 0)];
+        const p1 = pts[i];
+        const p2 = pts[i + 1];
+        const p3 = pts[Math.min(i + 2, pts.length - 1)];
+        const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
+        const cp1y = p1[1] + (p2[1] - p0[1]) / 6;
+        const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
+        const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2[0], p2[1]);
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  // Draw pen stroke being drawn (preview)
+  if (isPenDrawing && penDrawPoints.length >= 2) {
+    const pts = penDrawPoints.map(p => fieldToScreen(p.x, p.y, fa));
+    ctx.save();
+    ctx.strokeStyle = state.routeColor;
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo(pts[i][0], pts[i][1]);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawRoute(route, fa, useCurve) {
+  const pts = route.points.map(p => fieldToScreen(p.x, p.y, fa));
+  if (pts.length < 2) return;
+
+  ctx.save();
+  ctx.globalAlpha = route.isPreview ? 0.6 : 0.95;
+  ctx.strokeStyle = route.color;
+  ctx.lineWidth = route.isPreview ? 2 : 2.5;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  // Set dash pattern based on route style
+  const isDashed = route.dashed || false;
+  const dashPattern = isDashed ? [8, 6] : [];
+
+  if (pts.length === 2 && !useCurve) {
+    // 2 points: straight line with arrow
+    ctx.setLineDash(dashPattern);
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    ctx.lineTo(pts[1][0], pts[1][1]);
+    ctx.stroke();
+    drawArrow(pts[0], pts[1], route.color);
+  } else if (useCurve && pts.length >= 2) {
+    // Catmull-Rom spline for smooth curves
+    ctx.setLineDash(dashPattern);
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(i - 1, 0)];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[Math.min(i + 2, pts.length - 1)];
+      const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
+      const cp1y = p1[1] + (p2[1] - p0[1]) / 6;
+      const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
+      const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2[0], p2[1]);
+    }
+    ctx.stroke();
+    // Arrow at end
+    drawArrow(pts[pts.length - 2], pts[pts.length - 1], route.color);
+    // Waypoint dots
+    if (!route.isPreview) {
+      pts.forEach(pt => {
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = route.color;
+        ctx.beginPath();
+        ctx.arc(pt[0], pt[1], 3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+  } else {
+    // Polyline (3+ points, straight segments)
+    ctx.setLineDash(dashPattern);
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo(pts[i][0], pts[i][1]);
+    }
+    ctx.stroke();
+    drawArrow(pts[pts.length - 2], pts[pts.length - 1], route.color);
+  }
+  ctx.restore();
+}
+
+function drawArrow(from, to, color) {
+  const angle = Math.atan2(to[1] - from[1], to[0] - from[0]);
+  const headLen = 10;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(to[0], to[1]);
+  ctx.lineTo(to[0] - headLen * Math.cos(angle - Math.PI / 7), to[1] - headLen * Math.sin(angle - Math.PI / 7));
+  ctx.lineTo(to[0] - headLen * Math.cos(angle + Math.PI / 7), to[1] - headLen * Math.sin(angle + Math.PI / 7));
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawSmoothCurve(route, fa) {
+  const pts = route.points.map(p => fieldToScreen(p.x, p.y, fa));
+  if (pts.length < 2) return;
+
+  ctx.save();
+  ctx.globalAlpha = route.isPreview ? 0.6 : 0.95;
+  ctx.strokeStyle = route.color;
+  ctx.lineWidth = route.isPreview ? 2 : 2.5;
+  // Set dash pattern based on route style
+  const isDashed = route.dashed || false;
+  const dashPattern = isDashed ? [8, 6] : [];
+  ctx.setLineDash(dashPattern);
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+
+  if (pts.length === 2) {
+    ctx.lineTo(pts[1][0], pts[1][1]);
+  } else {
+    // Use Catmull-Rom spline for smooth curve
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(i - 1, 0)];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[Math.min(i + 2, pts.length - 1)];
+      const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
+      const cp1y = p1[1] + (p2[1] - p0[1]) / 6;
+      const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
+      const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2[0], p2[1]);
+    }
+  }
+
+  ctx.stroke();
+
+  // Arrow at end
+  if (pts.length >= 2) {
+    drawArrow(pts[pts.length - 2], pts[pts.length - 1], route.color);
+  }
+
+  ctx.restore();
+}
+
+// Douglas-Peucker algorithm for simplifying polyline points
+function simplifyPoints(points, tolerance) {
+  if (points.length <= 2) return points;
+
+  let maxDist = 0;
+  let maxIndex = 0;
+  const first = points[0];
+  const last = points[points.length - 1];
+
+  for (let i = 1; i < points.length - 1; i++) {
+    const dist = perpendicularDistance(points[i], first, last);
+    if (dist > maxDist) {
+      maxDist = dist;
+      maxIndex = i;
+    }
+  }
+
+  if (maxDist > tolerance) {
+    const left = simplifyPoints(points.slice(0, maxIndex + 1), tolerance);
+    const right = simplifyPoints(points.slice(maxIndex), tolerance);
+    return left.slice(0, -1).concat(right);
+  } else {
+    return [first, last];
+  }
+}
+
+function perpendicularDistance(point, lineStart, lineEnd) {
+  const dx = lineEnd.x - lineStart.x;
+  const dy = lineEnd.y - lineStart.y;
+  const lineLengthSq = dx * dx + dy * dy;
+
+  if (lineLengthSq === 0) {
+    const pdx = point.x - lineStart.x;
+    const pdy = point.y - lineStart.y;
+    return Math.sqrt(pdx * pdx + pdy * pdy);
+  }
+
+  const t = Math.max(0, Math.min(1, ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / lineLengthSq));
+  const projX = lineStart.x + t * dx;
+  const projY = lineStart.y + t * dy;
+  const pdx = point.x - projX;
+  const pdy = point.y - projY;
+  return Math.sqrt(pdx * pdx + pdy * pdy);
+}
+
+function drawPlayer(p, fa) {
+  const [sx, sy] = fieldToScreen(p.x, p.y, fa);
+  const isSelected = state.selectedPlayerIds.includes(p.id);
+  const color = POS_COLORS[p.type] || '#888';
+  const r = p.size || 16;
+  const fontSize = Math.max(8, Math.round(r * 0.65));
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.arc(sx + 2, sy + 2, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Circle
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(sx, sy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Border
+  ctx.lineWidth = isSelected ? 3 : 1.5;
+  ctx.strokeStyle = isSelected ? '#fff' : 'rgba(255,255,255,0.3)';
+  ctx.stroke();
+
+  // Glow for selected
+  if (isSelected) {
+    ctx.shadowColor = '#fff';
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // Label
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(p.type, sx, sy);
+}
+
+// ==================== PLAYER CHIPS ====================
+function createPlayerChips() {
+  const offContainer = document.getElementById('offensePlayers');
+  OFFENSE_TYPES.forEach(type => {
+    const chip = document.createElement('div');
+    chip.className = 'player-chip';
+    chip.draggable = true;
+    chip.dataset.type = type;
+    chip.innerHTML = `<div class="player-dot" style="background:${POS_COLORS[type]}">${type}</div><div class="player-label">${getPositionName(type)}</div>`;
+    chip.addEventListener('dragstart', onChipDragStart);
+    offContainer.appendChild(chip);
+  });
+
+  const defContainer = document.getElementById('defensePlayers');
+  DEFENSE_TYPES.forEach(type => {
+    const chip = document.createElement('div');
+    chip.className = 'player-chip';
+    chip.draggable = true;
+    chip.dataset.type = type;
+    chip.innerHTML = `<div class="player-dot" style="background:${POS_COLORS[type]}">${type}</div><div class="player-label">${getPositionName(type)}</div>`;
+    chip.addEventListener('dragstart', onChipDragStart);
+    defContainer.appendChild(chip);
+  });
+}
+
+function getPositionName(type) {
+  const names = {
+    QB: '四分卫', RB: '跑卫', WR: '外接手', TE: '近端锋', OL: '进攻线卫',
+    DL: '防守线卫', LB: '线卫', CB: '角卫', S: '安全卫',
+    FB: '-fullback', NT: '截锋', LE: '左端锋', RE: '右端锋',
+    LT: '左截锋', LG: '左护锋', C: '中锋', RG: '右护锋', RT: '右截锋',
+    LWR: '左外接', RWR: '右外接', MWR: '中间外接',
+    MLB: '中线卫', LLB: '左线卫', RLB: '右线卫', SLB: '边线卫',
+    LDE: '左端卫', RDE: '右端卫',
+    NB: ' nickel', MLCB: '中间角卫', MRCB: '中间角卫',
+    FS: '自由卫', SS: '强卫',
+    MLWR: '左中外接', MRWR: '右中外接',
+  };
+  return names[type] || type;
+}
+
+function onChipDragStart(e) {
+  const type = e.target.closest('.player-chip').dataset.type;
+  const color = POS_COLORS[type] || '#888';
+  const isOffense = OFFENSE_TYPES.includes(type);
+
+  // Create ghost
+  const ghost = document.createElement('div');
+  ghost.className = 'drag-ghost';
+  ghost.innerHTML = `<div class="player-dot" style="background:${color}">${type}</div>`;
+  document.body.appendChild(ghost);
+  e.dataTransfer.setDragImage(ghost, 20, 20);
+  e.dataTransfer.setData('text/plain', JSON.stringify({ type, color, isOffense }));
+  setTimeout(() => document.body.removeChild(ghost), 0);
+}
+
+// ==================== TEXT INPUT OVERLAY ====================
+let activeTextInput = null;
+
+function showTextInput(sx, sy, xPct, yPct, existingText) {
+  // Remove any existing text input
+  if (activeTextInput) { activeTextInput.remove(); activeTextInput = null; }
+
+  const rect = canvas.getBoundingClientRect();
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'text-input-overlay';
+  input.placeholder = '输入文字...';
+  input.style.left = (rect.left + sx) + 'px';
+  input.style.top = (rect.top + sy - 30) + 'px';
+  input.style.fontSize = (existingText ? existingText.fontSize : state.fontSize) + 'px';
+  input.style.borderColor = state.zoneColor;
+  input.style.position = 'fixed';
+
+  // Pre-fill when editing
+  if (existingText) {
+    input.value = existingText.text;
+  }
+
+  let committed = false;
+
+  const commitText = () => {
+    if (committed) return;
+    committed = true;
+    const val = input.value.trim();
+    if (val) {
+      if (existingText) {
+        // Update existing text
+        existingText.text = val;
+        existingText.fontSize = state.fontSize;
+        existingText.color = state.routeColor;
+        setStatus(`已更新文字: ${val}`);
+      } else {
+        // Create new text
+        state.texts.push({
+          id: state.nextId++,
+          x: xPct,
+          y: yPct,
+          text: val,
+          fontSize: state.fontSize,
+          color: state.routeColor,
+        });
+        setStatus(`已添加文字: ${val}`);
+      }
+      draw();
+    } else if (existingText) {
+      // Empty value when editing = delete
+      state.texts = state.texts.filter(t => t.id !== existingText.id);
+      state.selectedTextId = null;
+      setStatus('已删除文字');
+      draw();
+    } else {
+      setStatus('已取消文字输入');
+    }
+    activeTextInput = null;
+    input.remove();
+  };
+
+  input.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitText();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      committed = true;
+      activeTextInput = null;
+      input.remove();
+      setStatus('已取消文字输入');
+    }
+  });
+
+  input.addEventListener('blur', () => {
+    setTimeout(() => commitText(), 150);
+  });
+
+  document.body.appendChild(input);
+  activeTextInput = input;
+  setTimeout(() => input.focus(), 50);
+}
+
+// ==================== CANVAS EVENTS ====================
+let dragState = null; // { type, offsetX, offsetY }
+let isDraggingPlayer = false;
+let dragPlayerId = null;
+let isDraggingLos = false;
+let losDragStartY = 0;
+let isFreeDrawing = false;
+let freeDrawPoints = [];
+let isPenDrawing = false;
+let penDrawPoints = [];
+let isSelecting = false; // rubber band selection
+let selectionStart = null; // { sx, sy }
+let isDraggingText = false;
+let dragTextId = null;
+
+canvas.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+canvas.addEventListener('drop', e => {
+  e.preventDefault();
+  try {
+    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    const fa = getFieldArea();
+    const [xPct, yPct] = screenToField(sx, sy, fa);
+    if (xPct < -5 || xPct > 105 || yPct < -5 || yPct > 105) return;
+
+
+    const player = {
+      id: state.nextId++,
+      type: data.type,
+      x: Math.max(0, Math.min(100, xPct)),
+      y: Math.max(0, Math.min(100, yPct)),
+      isOffense: data.isOffense,
+      color: data.color,
+      size: state.playerSize,
+    };
+    state.players.push(player);
+    resolveOverlaps();
+    setStatus(`已添加 ${data.type} 到场地`);
+    draw();
+  } catch (err) { /* ignore */ }
+});
+
+// Helper: convert mouse/touch event to canvas-relative coordinates
+function canvasCoords(e) {
+  const rect = canvas.getBoundingClientRect();
+  return { sx: e.clientX - rect.left, sy: e.clientY - rect.top };
+}
+
+canvas.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  const { sx, sy } = canvasCoords(e);
+  const fa = getFieldArea();
+  const [xPct, yPct] = screenToField(sx, sy, fa);
+
+  if (state.mode === 'select') {
+    // 1. Player (highest priority)
+    const clickedPlayer = findPlayerAt(sx, sy, fa);
+    if (clickedPlayer) {
+      if (e.ctrlKey || e.metaKey) {
+        // Ctrl+click: toggle in multi-selection
+        const idx = state.selectedPlayerIds.indexOf(clickedPlayer.id);
+        if (idx >= 0) {
+          state.selectedPlayerIds.splice(idx, 1);
+        } else {
+          state.selectedPlayerIds.push(clickedPlayer.id);
+        }
+        state.selectedPlayerId = state.selectedPlayerIds.length > 0 ? state.selectedPlayerIds[state.selectedPlayerIds.length - 1] : null;
+      } else {
+        // Normal click: if player is already in multi-selection, keep selection for drag
+        if (!state.selectedPlayerIds.includes(clickedPlayer.id)) {
+          state.selectedPlayerIds = [clickedPlayer.id];
+        }
+        state.selectedPlayerId = clickedPlayer.id;
+      }
+      state.selectedRouteId = null;
+      state.selectedZoneId = null;
+      state.selectedTextId = null;
+      dragPlayerId = clickedPlayer.id;
+      isDraggingPlayer = true;
+      state._dragStartField = null;
+      state._dragStartPositions = null;
+      canvas.classList.add('dragging');
+      // Sync player size input
+      document.getElementById('playerSizeInput').value = clickedPlayer.size || 16;
+      draw();
+      return;
+    }
+    // 2. Zone vertex drag (if zone is selected)
+    if (state.selectedZoneId) {
+      const zone = state.zones.find(z => z.id === state.selectedZoneId);
+      if (zone) {
+        const vIdx = findZoneVertexAt(sx, sy, zone, fa);
+        if (vIdx !== -1) {
+          state.draggingZoneVertex = { zoneId: zone.id, vertexIndex: vIdx };
+          canvas.classList.add('dragging');
+          return;
+        }
+      }
+    }
+    // 3. Route
+    const clickedRoute = findRouteAt(sx, sy, fa);
+    if (clickedRoute) {
+      state.selectedRouteId = clickedRoute.id;
+      state.selectedPlayerId = null;
+      state.selectedPlayerIds = [];
+      state.selectedZoneId = null;
+      state.selectedTextId = null;
+      state.selectionRect = null;
+      isSelecting = false;
+      draw();
+      return;
+    }
+    // 4. Text (higher priority than zone, so text inside zones is selectable)
+    const clickedText = findTextAt(sx, sy, fa);
+    if (clickedText) {
+      state.selectedTextId = clickedText.id;
+      state.selectedPlayerId = null;
+      state.selectedPlayerIds = [];
+      state.selectedRouteId = null;
+      state.selectedZoneId = null;
+      state.selectionRect = null;
+      isSelecting = false;
+      isDraggingText = true;
+      dragTextId = clickedText.id;
+      canvas.classList.add('dragging');
+      // Sync font size and color
+      document.getElementById('fontSizeInput').value = clickedText.fontSize || 14;
+      document.getElementById('routeColor').value = clickedText.color || '#ffffff';
+      draw();
+      return;
+    }
+    // 5. Zone
+    const clickedZone = findZoneAt(sx, sy, fa);
+    if (clickedZone) {
+      state.selectedZoneId = clickedZone.id;
+      state.selectedPlayerId = null;
+      state.selectedPlayerIds = [];
+      state.selectedRouteId = null;
+      state.selectedTextId = null;
+      state.selectionRect = null;
+      isSelecting = false;
+      document.getElementById('zoneColorPicker').value = clickedZone.color || '#0096ff';
+      setStatus('已选中区域 — 拖拽顶点可编辑形状');
+      draw();
+      return;
+    }
+    // 6. LOS line
+    const [, losScreenY] = fieldToScreen(0, state.losY, fa);
+    if (Math.abs(sy - losScreenY) < 10) {
+      isDraggingLos = true;
+      losDragStartY = yPct;
+      canvas.classList.add('dragging');
+      return;
+    }
+    // 7. Nothing - start rubber band selection
+    state.selectedPlayerId = null;
+    state.selectedPlayerIds = [];
+    state.selectedRouteId = null;
+    state.selectedZoneId = null;
+    state.selectedTextId = null;
+    isSelecting = true;
+    selectionStart = { sx, sy };
+    state.selectionRect = { x1: sx, y1: sy, x2: sx, y2: sy };
+    draw();
+  } else if (state.mode === 'route') {
+    if (!state.selectedPlayerId) {
+      setStatus('请先选择一个球员');
+      return;
+    }
+    if (xPct < -10 || xPct > 110 || yPct < -10 || yPct > 110) return;
+
+    // Debounce: skip if this click is too close to the last one (double-click fires two mousedowns)
+    const now = Date.now();
+    if (state._lastRouteClickTime && now - state._lastRouteClickTime < 300) return;
+    state._lastRouteClickTime = now;
+
+    if (!state.drawingRoute) {
+      state.drawingRoute = { playerId: state.selectedPlayerId, points: [] };
+    }
+    // Click adds a waypoint. First click starts, subsequent clicks add points.
+    state.drawingRoute.points.push({ x: xPct, y: yPct });
+    setStatus(`路线: ${state.drawingRoute.points.length} 个路点 — 继续点击或双击完成`);
+    draw();
+  } else if (state.mode === 'draw') {
+    if (!state.selectedPlayerId) {
+      setStatus('请先选择一个球员');
+      return;
+    }
+    if (xPct < -10 || xPct > 110 || yPct < -10 || yPct > 110) return;
+    isFreeDrawing = true;
+    freeDrawPoints = [{ x: xPct, y: yPct }];
+    canvas.classList.add('dragging');
+    setStatus('自由绘制中...松开鼠标完成');
+  } else if (state.mode === 'zone') {
+    if (xPct < -10 || xPct > 110 || yPct < -10 || yPct > 110) return;
+    if (state.zoneShape === 'rect') {
+      // Rectangle: mousedown starts the rectangle
+      state.drawingZone = {
+        shape: 'rect',
+        points: [{ x: xPct, y: yPct }, { x: xPct, y: yPct }],
+        color: state.zoneColor,
+        label: '',
+      };
+      canvas.classList.add('dragging');
+      setStatus('拖动绘制矩形区域');
+    } else {
+      // Polygon: each click adds a vertex
+      if (!state.drawingZone) {
+        state.drawingZone = {
+          shape: 'polygon',
+          points: [{ x: xPct, y: yPct }],
+          color: state.zoneColor,
+          label: '',
+        };
+      } else {
+        state.drawingZone.points.push({ x: xPct, y: yPct });
+      }
+      setStatus(`多边形: ${state.drawingZone.points.length} 个顶点 — 双击完成`);
+    }
+    draw();
+  } else if (state.mode === 'text') {
+    if (xPct < -10 || xPct > 110 || yPct < -10 || yPct > 110) return;
+    // Check if clicking on existing text
+    const clickedText = findTextAt(sx, sy, fa);
+    if (clickedText) {
+      // If already selected, open edit input
+      if (state.selectedTextId === clickedText.id) {
+        showTextInput(sx, sy, clickedText.x, clickedText.y, clickedText);
+      } else {
+        state.selectedTextId = clickedText.id;
+        state.selectedPlayerId = null;
+        state.selectedRouteId = null;
+        state.selectedZoneId = null;
+        // Sync font size and color pickers
+        document.getElementById('fontSizeInput').value = clickedText.fontSize || 14;
+        state.fontSize = clickedText.fontSize || 14;
+        document.getElementById('routeColor').value = clickedText.color || '#ffffff';
+        state.routeColor = clickedText.color || '#ffffff';
+        setStatus('已选中文字 — 再次点击可编辑内容，修改字号或颜色可更新');
+        draw();
+      }
+    } else {
+      state.selectedTextId = null;
+      showTextInput(sx, sy, xPct, yPct);
+    }
+  } else if (state.mode === 'erase') {
+    // Check if clicking on a text
+    const clickedText = findTextAt(sx, sy, fa);
+    if (clickedText) {
+      state.texts = state.texts.filter(t => t.id !== clickedText.id);
+      setStatus('已删除文字');
+      draw();
+      return;
+    }
+    // Check if clicking on a zone
+    const clickedZone = findZoneAt(sx, sy, fa);
+    if (clickedZone) {
+      state.zones = state.zones.filter(z => z.id !== clickedZone.id);
+      setStatus('已删除区域');
+      draw();
+      return;
+    }
+    const clickedPlayer = findPlayerAt(sx, sy, fa);
+    if (clickedPlayer) {
+      removePlayer(clickedPlayer.id);
+      setStatus(`已删除 ${clickedPlayer.type}`);
+      draw();
+      return;
+    }
+    const clickedRoute = findRouteAt(sx, sy, fa);
+    if (clickedRoute) {
+      state.routes = state.routes.filter(r => r.id !== clickedRoute.id);
+      setStatus('已删除路线');
+      draw();
+      return;
+    }
+    const clickedPen = findPenStrokeAt(sx, sy, fa);
+    if (clickedPen) {
+      state.penStrokes = state.penStrokes.filter(s => s.id !== clickedPen.id);
+      setStatus('已删除笔迹');
+      draw();
+    }
+  } else if (state.mode === 'pen') {
+    if (xPct < -10 || xPct > 110 || yPct < -10 || yPct > 110) return;
+    isPenDrawing = true;
+    penDrawPoints = [{ x: xPct, y: yPct }];
+    canvas.classList.add('dragging');
+    setStatus('画笔绘制中...松开鼠标完成');
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  const { sx, sy } = canvasCoords(e);
+  const fa = getFieldArea();
+  const [mx, my] = [sx, sy];
+
+  if (isDraggingLos && state.mode === 'select') {
+    const [, yPct] = screenToField(mx, my, fa);
+    const deltaY = yPct - losDragStartY;
+    state.losY = Math.max(5, Math.min(95, state.losY + deltaY));
+    losDragStartY = yPct;
+    // Move all offense players by the same delta
+    state.players.forEach(p => {
+      if (p.isOffense) {
+        p.y = Math.max(0, Math.min(100, p.y + deltaY));
+      }
+    });
+    draw();
+    return;
+  }
+
+  if (isDraggingPlayer && dragPlayerId && state.mode === 'select') {
+    const [xPct, yPct] = screenToField(mx, my, fa);
+    // Calculate delta from drag start
+    if (!state._dragStartField) {
+      state._dragStartField = { x: xPct, y: yPct };
+      state._dragStartPositions = {};
+      state.selectedPlayerIds.forEach(id => {
+        const pp = state.players.find(p => p.id === id);
+        if (pp) state._dragStartPositions[id] = { x: pp.x, y: pp.y };
+      });
+    }
+    const dx = xPct - state._dragStartField.x;
+    const dy = yPct - state._dragStartField.y;
+    state.selectedPlayerIds.forEach(id => {
+      const pp = state.players.find(p => p.id === id);
+      const startPos = state._dragStartPositions[id];
+      if (pp && startPos) {
+        pp.x = Math.max(0, Math.min(100, startPos.x + dx));
+        pp.y = Math.max(0, Math.min(100, startPos.y + dy));
+      }
+    });
+    draw();
+  }
+
+  // Rubber band selection update
+  if (isSelecting && state.mode === 'select') {
+    state.selectionRect.x2 = sx;
+    state.selectionRect.y2 = sy;
+    draw();
+  }
+
+  // Text dragging
+  if (isDraggingText && dragTextId && state.mode === 'select') {
+    const t = state.texts.find(t => t.id === dragTextId);
+    if (t) {
+      const [xPct, yPct] = screenToField(mx, my, fa);
+      t.x = Math.max(0, Math.min(100, xPct));
+      t.y = Math.max(0, Math.min(100, yPct));
+      draw();
+    }
+  }
+
+  // Zone vertex dragging
+  if (state.draggingZoneVertex && state.mode === 'select') {
+    const zone = state.zones.find(z => z.id === state.draggingZoneVertex.zoneId);
+    if (zone) {
+      const [xPct, yPct] = screenToField(mx, my, fa);
+      zone.points[state.draggingZoneVertex.vertexIndex] = {
+        x: Math.max(0, Math.min(100, xPct)),
+        y: Math.max(0, Math.min(100, yPct))
+      };
+      draw();
+    }
+  }
+
+  if (state.drawingRoute && state.mode === 'route') {
+    state._mousePos = [mx, my];
+    draw();
+  }
+
+  if (isFreeDrawing && state.mode === 'draw') {
+    const [xPct, yPct] = screenToField(mx, my, fa);
+    if (xPct >= -10 && xPct <= 110 && yPct >= -10 && yPct <= 110) {
+      // Add point with distance threshold to avoid too many points
+      const lastPt = freeDrawPoints[freeDrawPoints.length - 1];
+      const dx = xPct - lastPt.x;
+      const dy = yPct - lastPt.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist >= 1) { // minimum 1% distance between points
+        freeDrawPoints.push({ x: xPct, y: yPct });
+        // Draw preview
+        draw();
+        const route = { points: freeDrawPoints, color: state.routeColor, isPreview: true, dashed: state.useDashed };
+        drawSmoothCurve(route, fa);
+      }
+    }
+  }
+
+  // Pen drawing preview
+  if (isPenDrawing && state.mode === 'pen') {
+    const [xPct, yPct] = screenToField(mx, my, fa);
+    if (xPct >= -10 && xPct <= 110 && yPct >= -10 && yPct <= 110) {
+      const lastPt = penDrawPoints[penDrawPoints.length - 1];
+      const dx = xPct - lastPt.x;
+      const dy = yPct - lastPt.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist >= 0.5) {
+        penDrawPoints.push({ x: xPct, y: yPct });
+        draw();
+      }
+    }
+  }
+
+  // Zone drawing preview
+  if (state.drawingZone && state.mode === 'zone') {
+    const [xPct, yPct] = screenToField(mx, my, fa);
+    if (state.zoneShape === 'rect') {
+      // Update second corner of rectangle
+      state.drawingZone.points[1] = { x: xPct, y: yPct };
+    }
+    draw();
+  }
+});
+
+document.addEventListener('mouseup', e => {
+  if (isDraggingLos) {
+    isDraggingLos = false;
+    canvas.classList.remove('dragging');
+    setStatus(`LOS 已移动到 ${state.losY.toFixed(0)}%`);
+  }
+  if (isDraggingPlayer) {
+    isDraggingPlayer = false;
+    dragPlayerId = null;
+    state._dragStartField = null;
+    state._dragStartPositions = null;
+    canvas.classList.remove('dragging');
+    resolveOverlaps();
+    draw();
+  }
+  if (isDraggingText) {
+    isDraggingText = false;
+    dragTextId = null;
+    canvas.classList.remove('dragging');
+    draw();
+  }
+  // Rubber band selection finalize
+  if (isSelecting && state.mode === 'select') {
+    isSelecting = false;
+    const fa = getFieldArea();
+    const rect = state.selectionRect;
+    if (rect) {
+      const minX = Math.min(rect.x1, rect.x2);
+      const maxX = Math.max(rect.x1, rect.x2);
+      const minY = Math.min(rect.y1, rect.y2);
+      const maxY = Math.max(rect.y1, rect.y2);
+      // Only select if rectangle is large enough (not just a click)
+      if (maxX - minX > 5 || maxY - minY > 5) {
+        const selected = [];
+        state.players.forEach(p => {
+          const [px, py] = fieldToScreen(p.x, p.y, fa);
+          if (px >= minX && px <= maxX && py >= minY && py <= maxY) {
+            selected.push(p.id);
+          }
+        });
+        state.selectedPlayerIds = selected;
+        state.selectedPlayerId = selected.length > 0 ? selected[selected.length - 1] : null;
+        if (selected.length > 0) {
+          const p = state.players.find(p => p.id === state.selectedPlayerId);
+          if (p) document.getElementById('playerSizeInput').value = p.size || 16;
+          setStatus(`已选中 ${selected.length} 个球员 — 拖拽移动，+/- 调整大小`);
+        }
+      }
+    }
+    state.selectionRect = null;
+    draw();
+  }
+  if (state.draggingZoneVertex) {
+    state.draggingZoneVertex = null;
+    canvas.classList.remove('dragging');
+    draw();
+  }
+  if (isPenDrawing && state.mode === 'pen') {
+    isPenDrawing = false;
+    canvas.classList.remove('dragging');
+    if (penDrawPoints.length >= 2) {
+      const simplified = simplifyPoints(penDrawPoints, 1.0);
+      state.penStrokes.push({
+        id: state.nextId++,
+        points: simplified,
+        color: state.routeColor,
+        width: 3,
+      });
+      setStatus(`画笔绘制完成 (${simplified.length} 个点)`);
+    } else {
+      setStatus('画笔取消 - 需要更多点');
+    }
+    penDrawPoints = [];
+    draw();
+  }
+  if (isFreeDrawing && state.mode === 'draw') {
+    isFreeDrawing = false;
+    canvas.classList.remove('dragging');
+    // Finish free draw - simplify points and save route
+    if (freeDrawPoints.length >= 3) {
+      const simplified = simplifyPoints(freeDrawPoints, 1.5);
+      state.routes.push({
+        id: state.nextId++,
+        playerId: state.selectedPlayerId,
+        points: simplified,
+        color: state.routeColor,
+        useCurve: true,
+        dashed: state.useDashed,
+      });
+      const lineType = state.useDashed ? '虚线' : '实线';
+      setStatus(`自由绘制完成 (${simplified.length} 个点, ${lineType})`);
+    } else if (freeDrawPoints.length >= 2) {
+      state.routes.push({
+        id: state.nextId++,
+        playerId: state.selectedPlayerId,
+        points: freeDrawPoints,
+        color: state.routeColor,
+        useCurve: false,
+        dashed: state.useDashed,
+      });
+      const lineType = state.useDashed ? '虚线' : '实线';
+      setStatus(`自由绘制完成 (${lineType})`);
+    } else {
+      setStatus('绘制取消 - 需要更多点');
+    }
+    freeDrawPoints = [];
+    draw();
+  }
+  // Zone rectangle completion on mouseup
+  if (state.drawingZone && state.drawingZone.shape === 'rect' && state.mode === 'zone') {
+    canvas.classList.remove('dragging');
+    const pts = state.drawingZone.points;
+    const dx = Math.abs(pts[1].x - pts[0].x);
+    const dy = Math.abs(pts[1].y - pts[0].y);
+    if (dx > 2 && dy > 2) {
+      state.drawingZone.id = state.nextId++;
+      state.drawingZone.fontSize = state.fontSize;
+      state.zones.push(state.drawingZone);
+      setStatus('已创建矩形区域 — 切换到文字模式可添加标注');
+    } else {
+      setStatus('区域太小，已取消');
+    }
+    state.drawingZone = null;
+    draw();
+  }
+});
+
+canvas.addEventListener('dblclick', e => {
+  const { sx, sy } = canvasCoords(e);
+  const fa = getFieldArea();
+
+  // In select mode, double-click on selected zone edge to add vertex
+  if (state.mode === 'select' && state.selectedZoneId) {
+    const zone = state.zones.find(z => z.id === state.selectedZoneId);
+    if (zone && zone.shape === 'polygon') {
+      const [xPct, yPct] = screenToField(sx, sy, fa);
+      const insertIdx = findZoneEdgeInsertIndex(xPct, yPct, zone);
+      if (insertIdx !== -1) {
+        zone.points.splice(insertIdx, 0, { x: xPct, y: yPct });
+        setStatus(`已添加顶点 (${zone.points.length} 个顶点)`);
+        draw();
+        return;
+      }
+    }
+  }
+
+  if (state.mode === 'route' && state.drawingRoute) {
+    e.preventDefault();
+    finishDrawingRoute();
+  }
+  // Zone polygon completion on dblclick
+  if (state.mode === 'zone' && state.drawingZone && state.drawingZone.shape === 'polygon') {
+    e.preventDefault();
+    if (state.drawingZone.points.length >= 3) {
+      state.drawingZone.id = state.nextId++;
+      state.drawingZone.fontSize = state.fontSize;
+      state.zones.push(state.drawingZone);
+      setStatus('已创建多边形区域 — 切换到文字模式可添加标注');
+    } else {
+      setStatus('多边形至少需要 3 个顶点');
+    }
+    state.drawingZone = null;
+    draw();
+  }
+});
+
+canvas.addEventListener('mouseleave', () => {
+  if (state.drawingRoute) {
+    state._mousePos = null;
+    draw();
+  }
+});
+
+// Right-click to remove zone vertex
+canvas.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  if (state.mode !== 'select' || !state.selectedZoneId) return;
+  const { sx, sy } = canvasCoords(e);
+  const fa = getFieldArea();
+  const zone = state.zones.find(z => z.id === state.selectedZoneId);
+  if (!zone) return;
+  const vIdx = findZoneVertexAt(sx, sy, zone, fa);
+  if (vIdx !== -1 && zone.points.length > 3) {
+    zone.points.splice(vIdx, 1);
+    setStatus(`已删除顶点 (${zone.points.length} 个顶点)`);
+    draw();
+  } else if (vIdx !== -1) {
+    setStatus('多边形至少需要 3 个顶点');
+  }
+});
+
+// Mouse wheel to resize selected text
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (activeTextInput || document.activeElement?.tagName === 'INPUT') return;
+  if (state.selectedTextId && state.mode === 'select') {
+    const t = state.texts.find(t => t.id === state.selectedTextId);
+    if (t) {
+      const delta = e.deltaY > 0 ? -1 : 1;
+      t.fontSize = Math.max(8, Math.min(40, (t.fontSize || 14) + delta));
+      state.fontSize = t.fontSize;
+      document.getElementById('fontSizeInput').value = t.fontSize;
+      setStatus(`文字大小: ${t.fontSize}px`);
+      draw();
+    }
+  }
+}, { passive: false });
+
+function finishDrawingRoute() {
+  if (!state.drawingRoute || state.drawingRoute.points.length < 2) {
+    state.drawingRoute = null;
+    state._mousePos = null;
+    state._lastRouteClickTime = null;
+    draw();
+    return;
+  }
+  state.routes.push({
+    id: state.nextId++,
+    playerId: state.drawingRoute.playerId,
+    points: [...state.drawingRoute.points],
+    color: state.routeColor,
+    useCurve: state.useCurve,
+    dashed: state.useDashed,
+  });
+  const lineType = state.useDashed ? '虚线' : '实线';
+  setStatus(`路线已绘制 (${state.drawingRoute.points.length} 个路点, ${lineType})`);
+  state.drawingRoute = null;
+  state._mousePos = null;
+  state._lastRouteClickTime = null;
+  draw();
+}
+
+function cancelDrawingRoute() {
+  state.drawingRoute = null;
+  state._mousePos = null;
+  setStatus('已取消路线绘制');
+  draw();
+}
+
+// ==================== HIT TESTING ====================
+function findPlayerAt(sx, sy, fa) {
+  for (let i = state.players.length - 1; i >= 0; i--) {
+    const p = state.players[i];
+    const [px, py] = fieldToScreen(p.x, p.y, fa);
+    const r = p.size || 16;
+    const dist = Math.hypot(sx - px, sy - py);
+    if (dist <= r + 4) return p;
+  }
+  return null;
+}
+
+function findRouteAt(sx, sy, fa) {
+  const threshold = 8;
+  for (let i = state.routes.length - 1; i >= 0; i--) {
+    const route = state.routes[i];
+    const pts = route.points.map(p => fieldToScreen(p.x, p.y, fa));
+    for (let j = 1; j < pts.length; j++) {
+      const dist = pointToSegmentDist(sx, sy, pts[j-1][0], pts[j-1][1], pts[j][0], pts[j][1]);
+      if (dist <= threshold) return route;
+    }
+  }
+  return null;
+}
+
+function findZoneAt(sx, sy, fa) {
+  const [fx, fy] = screenToField(sx, sy, fa);
+  for (let i = state.zones.length - 1; i >= 0; i--) {
+    const zone = state.zones[i];
+    if (zone.shape === 'rect' && zone.points.length === 2) {
+      const [p1, p2] = zone.points;
+      const minX = Math.min(p1.x, p2.x), maxX = Math.max(p1.x, p2.x);
+      const minY = Math.min(p1.y, p2.y), maxY = Math.max(p1.y, p2.y);
+      if (fx >= minX && fx <= maxX && fy >= minY && fy <= maxY) return zone;
+    } else if (zone.points.length >= 3) {
+      if (pointInPolygon(fx, fy, zone.points)) return zone;
+    }
+  }
+  return null;
+}
+
+function pointInPolygon(x, y, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i].x, yi = pts[i].y;
+    const xj = pts[j].x, yj = pts[j].y;
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function findZoneVertexAt(sx, sy, zone, fa) {
+  const threshold = 10;
+  for (let i = 0; i < zone.points.length; i++) {
+    const [vx, vy] = fieldToScreen(zone.points[i].x, zone.points[i].y, fa);
+    if (Math.hypot(sx - vx, sy - vy) <= threshold) return i;
+  }
+  return -1;
+}
+
+function findZoneEdgeInsertIndex(xPct, yPct, zone) {
+  const threshold = 3; // field percentage units
+  const pts = zone.points;
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length;
+    const dist = pointToSegmentDist(xPct, yPct, pts[i].x, pts[i].y, pts[j].x, pts[j].y);
+    if (dist <= threshold) return j; // insert after vertex i
+  }
+  return -1;
+}
+
+function findPenStrokeAt(sx, sy, fa) {
+  const threshold = 8;
+  for (let i = state.penStrokes.length - 1; i >= 0; i--) {
+    const stroke = state.penStrokes[i];
+    const pts = stroke.points.map(p => fieldToScreen(p.x, p.y, fa));
+    for (let j = 1; j < pts.length; j++) {
+      const dist = pointToSegmentDist(sx, sy, pts[j-1][0], pts[j-1][1], pts[j][0], pts[j][1]);
+      if (dist <= threshold) return stroke;
+    }
+  }
+  return null;
+}
+
+function findTextAt(sx, sy, fa) {
+  for (let i = state.texts.length - 1; i >= 0; i--) {
+    const t = state.texts[i];
+    const [tx, ty] = fieldToScreen(t.x, t.y, fa);
+    const fs = t.fontSize || 14;
+    ctx.font = `bold ${fs}px sans-serif`;
+    const halfW = ctx.measureText(t.text).width / 2 + 6;
+    const halfH = fs / 2 + 4;
+    if (sx >= tx - halfW && sx <= tx + halfW && sy >= ty - halfH && sy <= ty + halfH) return t;
+  }
+  return null;
+}
+
+function pointToSegmentDist(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.hypot(px - x1, py - y1);
+  let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
+// ==================== PLAYER MANAGEMENT ====================
+function removePlayer(id) {
+  state.players = state.players.filter(p => p.id !== id);
+  state.routes = state.routes.filter(r => r.playerId !== id);
+  if (state.selectedPlayerId === id) state.selectedPlayerId = null;
+  state.selectedPlayerIds = state.selectedPlayerIds.filter(sid => sid !== id);
+  if (state.drawingRoute && state.drawingRoute.playerId === id) {
+    state.drawingRoute = null;
+  }
+}
+
+// ==================== KEYBOARD ====================
+document.addEventListener('keydown', e => {
+  // Skip shortcuts when text input is active
+  if (activeTextInput || document.activeElement?.tagName === 'INPUT') return;
+
+  if (e.key === 's' || e.key === 'S') setMode('select');
+  else if (e.key === 'd' || e.key === 'D') setMode('route');
+  else if (e.key === 'f' || e.key === 'F') setMode('draw');
+  else if (e.key === 'a' || e.key === 'A') setMode('zone');
+  else if (e.key === 'p' || e.key === 'P') setMode('pen');
+  else if (e.key === 't' || e.key === 'T') setMode('text');
+  else if (e.key === 'e' || e.key === 'E') setMode('erase');
+  else if (e.key === 'r' || e.key === 'R') {
+    if (state.mode === 'zone') {
+      state.zoneShape = state.zoneShape === 'rect' ? 'polygon' : 'rect';
+      document.getElementById('zoneShapeToggle').textContent = state.zoneShape === 'rect' ? '矩形' : '多边形';
+      if (state.drawingZone) { state.drawingZone = null; draw(); }
+      setStatus(`已切换为${state.zoneShape === 'rect' ? '矩形' : '多边形'}区域模式`);
+    }
+  }
+  else if (e.key === 'l' || e.key === 'L') {
+    state.useDashed = !state.useDashed;
+    document.getElementById('lineStyleToggle').textContent = state.useDashed ? '虚线' : '实线';
+    draw();
+  }
+  else if (e.key === 'o' || e.key === 'O') {
+    alignOffensiveLine();
+  }
+  else if ((e.key === '=' || e.key === '+') && state.selectedPlayerIds.length > 0) {
+    // Increase all selected players' size
+    state.selectedPlayerIds.forEach(id => {
+      const p = state.players.find(p => p.id === id);
+      if (p) p.size = Math.min(40, (p.size || 16) + 2);
+    });
+    const last = state.players.find(p => p.id === state.selectedPlayerId);
+    if (last) {
+      state.playerSize = last.size;
+      document.getElementById('playerSizeInput').value = last.size;
+    }
+    resolveOverlaps();
+    draw();
+  }
+  else if (e.key === '-' && state.selectedPlayerIds.length > 0) {
+    // Decrease all selected players' size
+    state.selectedPlayerIds.forEach(id => {
+      const p = state.players.find(p => p.id === id);
+      if (p) p.size = Math.max(10, (p.size || 16) - 2);
+    });
+    const last = state.players.find(p => p.id === state.selectedPlayerId);
+    if (last) {
+      state.playerSize = last.size;
+      document.getElementById('playerSizeInput').value = last.size;
+    }
+    resolveOverlaps();
+    draw();
+  }
+  else if (e.key === 'Enter' && state.drawingRoute) {
+    finishDrawingRoute();
+  } else if (e.key === 'Enter' && state.mode === 'zone' && state.drawingZone && state.drawingZone.shape === 'polygon') {
+    if (state.drawingZone.points.length >= 3) {
+      state.drawingZone.id = state.nextId++;
+      state.drawingZone.fontSize = state.fontSize;
+      state.zones.push(state.drawingZone);
+      setStatus('已创建多边形区域 — 切换到文字模式可添加标注');
+    } else {
+      setStatus('多边形至少需要 3 个顶点');
+    }
+    state.drawingZone = null;
+    draw();
+  } else if (e.key === 'Delete') {
+    if (state.selectedPlayerIds.length > 0) {
+      const count = state.selectedPlayerIds.length;
+      state.selectedPlayerIds.forEach(id => removePlayer(id));
+      state.selectedPlayerIds = [];
+      state.selectedPlayerId = null;
+      setStatus(`已删除 ${count} 个球员`);
+      draw();
+    } else if (state.selectedRouteId) {
+      state.routes = state.routes.filter(r => r.id !== state.selectedRouteId);
+      state.selectedRouteId = null;
+      setStatus('已删除路线');
+      draw();
+    } else if (state.selectedZoneId) {
+      state.zones = state.zones.filter(z => z.id !== state.selectedZoneId);
+      state.selectedZoneId = null;
+      setStatus('已删除区域');
+      draw();
+    } else if (state.selectedTextId) {
+      state.texts = state.texts.filter(t => t.id !== state.selectedTextId);
+      state.selectedTextId = null;
+      setStatus('已删除文字');
+      draw();
+    }
+  } else if (e.key === 'Escape') {
+    if (state.drawingRoute) {
+      cancelDrawingRoute();
+    } else if (state.drawingZone) {
+      state.drawingZone = null;
+      canvas.classList.remove('dragging');
+      setStatus('已取消区域绘制');
+      draw();
+    } else if (isFreeDrawing) {
+      isFreeDrawing = false;
+      freeDrawPoints = [];
+      canvas.classList.remove('dragging');
+      setStatus('已取消自由绘制');
+      draw();
+    } else if (isPenDrawing) {
+      isPenDrawing = false;
+      penDrawPoints = [];
+      canvas.classList.remove('dragging');
+      setStatus('已取消画笔绘制');
+      draw();
+    } else {
+      state.selectedPlayerId = null;
+      state.selectedPlayerIds = [];
+      state.selectedRouteId = null;
+      state.selectedZoneId = null;
+      state.selectedTextId = null;
+      state.selectionRect = null;
+      isSelecting = false;
+      draw();
+    }
+  }
+});
+
+// ==================== MODE SWITCHING ====================
+const modeNames = {
+  'select': '选择',
+  'route': '画路线',
+  'draw': '自由绘制',
+  'zone': '区域',
+  'pen': '画笔',
+  'text': '文字',
+  'erase': '擦除'
+};
+
+function setMode(mode) {
+  state.mode = mode;
+  if (mode !== 'route') {
+    state.drawingRoute = null;
+  }
+  if (mode !== 'zone') {
+    state.drawingZone = null;
+  }
+  if (mode === 'draw' || mode === 'zone') {
+    // Keep selectedPlayerId for draw/zone mode
+  } else if (mode !== 'route') {
+    state.selectedPlayerId = null;
+    state.selectedPlayerIds = [];
+  }
+  // Remove any open text input
+  if (activeTextInput) { activeTextInput.remove(); activeTextInput = null; }
+  // Cancel any ongoing free draw
+  if (mode !== 'draw' && isFreeDrawing) {
+    isFreeDrawing = false;
+    freeDrawPoints = [];
+  }
+  // Cancel any ongoing pen draw
+  if (mode !== 'pen' && isPenDrawing) {
+    isPenDrawing = false;
+    penDrawPoints = [];
+  }
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+  canvas.className = '';
+  if (mode === 'route') canvas.classList.add('route-mode');
+  else if (mode === 'draw') canvas.classList.add('draw-mode');
+  else if (mode === 'zone') canvas.classList.add('zone-mode');
+  else if (mode === 'pen') canvas.classList.add('pen-mode');
+  else if (mode === 'text') canvas.classList.add('text-mode');
+  else if (mode === 'erase') canvas.classList.add('erase-mode');
+  if (mode === 'route' && !state.selectedPlayerId) {
+    setStatus('请先选择一个球员，然后点击场地添加路点，Enter 完成或 Esc 取消');
+  } else if (mode === 'route' && state.selectedPlayerId) {
+    setStatus(`画路线模式 — 点击场地添加路点，Enter 完成或 Esc 取消`);
+  } else if (mode === 'draw' && !state.selectedPlayerId) {
+    setStatus('请先选择一个球员，然后按住鼠标自由绘制');
+  } else if (mode === 'draw' && state.selectedPlayerId) {
+    setStatus(`自由绘制模式 — 按住鼠标拖动绘制曲线，松开完成`);
+  } else if (mode === 'zone') {
+    setStatus(`区域模式 — ${state.zoneShape === 'rect' ? '拖动绘制矩形' : '点击添加顶点，双击或Enter完成'}，R切换形状，Esc取消`);
+  } else if (mode === 'pen') {
+    setStatus('画笔模式 — 按住鼠标拖动自由绘制，松开完成');
+  } else {
+    setStatus(`已切换到${modeNames[mode]} — ${getModeHint(mode)}`);
+  }
+  draw();
+}
+
+function getModeHint(mode) {
+  switch (mode) {
+    case 'select': return '拖拽球员移动位置，点击选中';
+    case 'route': return '点击场地添加路点，双击完成';
+    case 'draw': return '按住鼠标拖动自由绘制曲线';
+    case 'zone': return '拖动绘制矩形/点击添加多边形顶点，双击或Enter完成';
+    case 'pen': return '按住鼠标拖动自由绘制，松开完成';
+    case 'text': return '点击场地添加文字标注';
+    case 'erase': return '点击球员、路线、区域或文字删除';
+  }
+}
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => setMode(btn.dataset.mode));
+});
+
+// ==================== ROUTE COLOR ====================
+document.getElementById('routeColor').addEventListener('input', e => {
+  state.routeColor = e.target.value;
+  // Also update selected text's color
+  if (state.selectedTextId && state.mode === 'text') {
+    const t = state.texts.find(t => t.id === state.selectedTextId);
+    if (t) {
+      t.color = e.target.value;
+      draw();
+    }
+  }
+});
+
+document.getElementById('zoneColorPicker').addEventListener('input', e => {
+  state.zoneColor = e.target.value;
+  // Also update selected zone's color
+  if (state.selectedZoneId) {
+    const zone = state.zones.find(z => z.id === state.selectedZoneId);
+    if (zone) {
+      zone.color = e.target.value;
+      draw();
+    }
+  }
+});
+
+document.getElementById('playerSizeInput').addEventListener('input', e => {
+  state.playerSize = Math.max(10, Math.min(40, parseInt(e.target.value) || 16));
+  // Update all selected players' size
+  if (state.selectedPlayerIds.length > 0) {
+    state.selectedPlayerIds.forEach(id => {
+      const p = state.players.find(p => p.id === id);
+      if (p) p.size = state.playerSize;
+    });
+    resolveOverlaps();
+    draw();
+  }
+});
+
+document.getElementById('fontSizeInput').addEventListener('input', e => {
+  state.fontSize = Math.max(8, Math.min(40, parseInt(e.target.value) || 14));
+  // Also update selected text's font size
+  if (state.selectedTextId && state.mode === 'text') {
+    const t = state.texts.find(t => t.id === state.selectedTextId);
+    if (t) {
+      t.fontSize = state.fontSize;
+      draw();
+    }
+  }
+});
+
+// ==================== EXPORT ====================
+document.getElementById('exportBtn').addEventListener('click', () => {
+  // Deselect everything for clean export
+  const selPid = state.selectedPlayerId;
+  const selPids = [...state.selectedPlayerIds];
+  const selRid = state.selectedRouteId;
+  const selZid = state.selectedZoneId;
+  const selTid = state.selectedTextId;
+  state.selectedPlayerId = null;
+  state.selectedPlayerIds = [];
+  state.selectedRouteId = null;
+  state.selectedZoneId = null;
+  state.selectedTextId = null;
+  draw();
+
+  const link = document.createElement('a');
+  const now = new Date();
+  const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
+  link.download = `tactics_${ts}.png`;
+  link.href = canvas.toDataURL('image/png', 1.0);
+  link.click();
+
+  state.selectedPlayerId = selPid;
+  state.selectedPlayerIds = selPids;
+  state.selectedRouteId = selRid;
+  state.selectedZoneId = selZid;
+  state.selectedTextId = selTid;
+  draw();
+  setStatus('战术图已导出为 PNG');
+});
+
+// ==================== CLEAR PEN ====================
+document.getElementById('clearPenBtn').addEventListener('click', () => {
+  if (state.penStrokes.length === 0) return;
+  if (confirm('确定要清除所有笔迹吗？')) {
+    state.penStrokes = [];
+    setStatus('已清除所有笔迹');
+    draw();
+  }
+});
+
+// ==================== CLEAR ====================
+document.getElementById('clearBtn').addEventListener('click', () => {
+  if (state.players.length === 0 && state.routes.length === 0 && state.zones.length === 0 && state.texts.length === 0 && state.penStrokes.length === 0) return;
+  if (confirm('确定要清空所有球员、路线、区域、文字和笔迹吗？')) {
+    state.players = [];
+    state.routes = [];
+    state.zones = [];
+    state.texts = [];
+    state.penStrokes = [];
+    state.selectedPlayerId = null;
+    state.selectedPlayerIds = [];
+    state.selectedRouteId = null;
+    state.selectedZoneId = null;
+    state.selectedTextId = null;
+    state.selectionRect = null;
+    isSelecting = false;
+    state.drawingRoute = null;
+    state.drawingZone = null;
+    setStatus('已清空场地');
+    draw();
+  }
+});
+
+// ==================== TEMPLATES ====================
+function createTemplateButtons() {
+  const offContainer = document.getElementById('offenseTemplates');
+  Object.entries(OFFENSE_FORMATIONS).forEach(([key, fmt]) => {
+    const btn = document.createElement('button');
+    btn.className = 'template-btn';
+    btn.textContent = fmt.label;
+    btn.title = Object.values(fmt.players).map(p => p.type).join(' + ');
+    btn.addEventListener('click', () => loadOffenseFormation(key));
+    offContainer.appendChild(btn);
+  });
+
+  const defContainer = document.getElementById('defenseTemplates');
+  Object.entries(DEFENSE_FORMATIONS).forEach(([key, fmt]) => {
+    const btn = document.createElement('button');
+    btn.className = 'template-btn';
+    btn.textContent = fmt.label;
+    btn.title = Object.values(fmt.players).map(p => p.type).join(' + ');
+    btn.addEventListener('click', () => loadDefenseFormation(key));
+    defContainer.appendChild(btn);
+  });
+}
+
+// ==================== ALIGN OFFENSIVE LINE ====================
+function alignOffensiveLine() {
+  // Find all OL players on the field
+  const olPlayers = state.players.filter(p => p.isOffense && p.type === 'OL');
+
+  if (olPlayers.length === 0) {
+    setStatus('场上没有 OL 球员');
+    return;
+  }
+
+  // Sort OL players by x position (left to right)
+  olPlayers.sort((a, b) => a.x - b.x);
+
+  // Compact spacing - OL should be tightly packed around the center
+  const spacing = 6; // tight spacing between OL players
+  const centerX = 50; // center of the field
+  const totalWidth = (olPlayers.length - 1) * spacing;
+  const startX = centerX - totalWidth / 2;
+
+  // Position each OL on the LOS line, centered at x=50
+  olPlayers.forEach((player, index) => {
+    player.x = startX + spacing * index;
+    player.y = state.losY;
+  });
+
+  resolveOverlaps();
+  setStatus(`已将 ${olPlayers.length} 个 OL 排列在 LOS 线上`);
+  draw();
+}
+
+function resolveOverlaps() {
+  const GAP = 4; // extra gap pixels between players
+  const fa = getFieldArea();
+
+  let resolved = true;
+  let iterations = 0;
+  while (resolved && iterations < 20) {
+    resolved = false;
+    iterations++;
+    for (let i = 0; i < state.players.length; i++) {
+      for (let j = i + 1; j < state.players.length; j++) {
+        const a = state.players[i];
+        const b = state.players[j];
+        const ra = a.size || 16;
+        const rb = b.size || 16;
+        const minDistPx = ra + rb + GAP;
+        const minDistPct = (minDistPx / fa.fieldW) * 100;
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < minDistPct) {
+          if (dist > 0) {
+            const overlap = (minDistPct - dist) / 2 + 0.5;
+            const nx = dx / dist;
+            const ny = dy / dist;
+            a.x = Math.max(0, Math.min(100, a.x + nx * overlap));
+            a.y = Math.max(0, Math.min(100, a.y + ny * overlap));
+            b.x = Math.max(0, Math.min(100, b.x - nx * overlap));
+            b.y = Math.max(0, Math.min(100, b.y - ny * overlap));
+          } else {
+            // Exact overlap - shift apart diagonally
+            b.x = Math.min(100, b.x + minDistPct * 0.7);
+            b.y = Math.min(100, b.y + minDistPct * 0.7);
+          }
+          resolved = true;
+        }
+      }
+    }
+  }
+}
+
+function loadOffenseFormation(key) {
+  const fmt = OFFENSE_FORMATIONS[key];
+  if (!fmt) return;
+  // Save IDs of offense players being removed
+  const offenseIds = state.players.filter(p => p.isOffense).map(p => p.id);
+  // Remove existing offense players
+  state.players = state.players.filter(p => !p.isOffense);
+  // Remove routes belonging to removed offense players
+  state.routes = state.routes.filter(r => !offenseIds.includes(r.playerId));
+  // Calculate offset to preserve current LOS position (default offense LOS is y=70)
+  const losOffset = state.losY - 70;
+  // Add new offense players
+  fmt.players.forEach(fp => {
+    // Normalize type - handle special types
+    let type = fp.type;
+    if (!POS_COLORS[type]) {
+      // Map common aliases
+      if (type === 'FB' || type === 'HB') type = 'RB';
+      else if (type === 'LT' || type === 'LG' || type === 'C' || type === 'RG' || type === 'RT') type = 'OL';
+      else if (type === 'LWR' || type === 'RWR' || type === 'MWR' || type === 'MLWR' || type === 'MRWR') type = 'WR';
+    }
+    state.players.push({
+      id: state.nextId++,
+      type: type,
+      x: fp.x,
+      y: Math.max(0, Math.min(100, fp.y + losOffset)),
+      isOffense: true,
+      color: POS_COLORS[type] || '#888',
+      size: state.playerSize,
+    });
+  });
+  resolveOverlaps();
+  setStatus(`已加载进攻阵型: ${fmt.label}`);
+  draw();
+}
+
+function loadDefenseFormation(key) {
+  const fmt = DEFENSE_FORMATIONS[key];
+  if (!fmt) return;
+  // Save IDs of defense players being removed
+  const defenseIds = state.players.filter(p => !p.isOffense).map(p => p.id);
+  // Remove existing defense players
+  state.players = state.players.filter(p => p.isOffense);
+  // Remove routes belonging to removed defense players
+  state.routes = state.routes.filter(r => !defenseIds.includes(r.playerId));
+  // Add new defense players - position relative to current LOS
+  fmt.players.forEach(fp => {
+    let type = fp.type;
+    if (!POS_COLORS[type]) {
+      if (type === 'NT' || type === 'LE' || type === 'RE' || type === 'LDE' || type === 'RDE') type = 'DL';
+      else if (type === 'MLB' || type === 'LLB' || type === 'RLB' || type === 'SLB') type = 'LB';
+      else if (type === 'LCB' || type === 'RCB' || type === 'MLCB' || type === 'MRCB') type = 'CB';
+      else if (type === 'FS' || type === 'SS') type = 'S';
+      else type = 'DL';
+    }
+    // yOff is offset from LOS (negative = toward defense goal line / smaller y)
+    const y = Math.max(0, Math.min(100, state.losY + fp.yOff));
+    state.players.push({
+      id: state.nextId++,
+      type: type,
+      x: fp.x,
+      y: y,
+      isOffense: false,
+      color: POS_COLORS[type] || '#888',
+      size: state.playerSize,
+    });
+  });
+  resolveOverlaps();
+  setStatus(`已加载防守阵型: ${fmt.label}`);
+  draw();
+}
+
+// ==================== CURVE TOGGLE ====================
+document.getElementById('curveToggle').addEventListener('click', () => {
+  state.useCurve = !state.useCurve;
+  document.getElementById('curveToggle').textContent = state.useCurve ? '曲线' : '折线';
+  draw();
+});
+
+document.getElementById('lineStyleToggle').addEventListener('click', () => {
+  state.useDashed = !state.useDashed;
+  document.getElementById('lineStyleToggle').textContent = state.useDashed ? '虚线' : '实线';
+  draw();
+});
+
+document.getElementById('zoneShapeToggle').addEventListener('click', () => {
+  state.zoneShape = state.zoneShape === 'rect' ? 'polygon' : 'rect';
+  document.getElementById('zoneShapeToggle').textContent = state.zoneShape === 'rect' ? '矩形' : '多边形';
+  if (state.drawingZone) { state.drawingZone = null; draw(); }
+  setStatus(`已切换为${state.zoneShape === 'rect' ? '矩形' : '多边形'}区域模式`);
+});
+
+// ==================== ALIGN OL BUTTON ====================
+document.getElementById('alignOlBtn').addEventListener('click', () => {
+  alignOffensiveLine();
+});
+
+// ==================== FINISH ROUTE BUTTON ====================
+document.getElementById('finishRouteBtn').addEventListener('click', () => {
+  if (state.drawingRoute) {
+    finishDrawingRoute();
+  }
+});
+
+// ==================== STATUS ====================
+function setStatus(text) {
+  document.getElementById('statusText').textContent = text;
+}
+// ==================== INIT ====================
+function init() {
+  createPlayerChips();
+  createTemplateButtons();
+  resizeCanvas();
+  setStatus('就绪 — 从左侧拖拽球员到场地');
+}
+
+init();
+</script>
+</body>
+</html>
