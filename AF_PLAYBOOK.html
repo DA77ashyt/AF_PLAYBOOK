@@ -434,8 +434,8 @@ function draw() {
     ctx.lineTo(fa.fieldRight, y);
     ctx.stroke();
 
-    // Yard numbers
-    const yardNum = i <= 5 ? i * 10 : 60 - i * 10;
+    // Yard numbers: 10, 20, 30, 40, 50, 40, 30, 20, 10
+    const yardNum = i <= 5 ? i * 10 : (10 - i) * 10;
     const num = i === 0 || i === 10 ? 'GOAL' : String(yardNum);
     ctx.font = 'bold 12px sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
