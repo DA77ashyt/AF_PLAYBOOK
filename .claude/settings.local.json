@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(start \"\" \"E:\\\\football_claude\\\\index.html\")",
+      "Bash(cmd.exe /c \"start E:\\\\football_claude\\\\index.html\")",
+      "Bash(node *)"
+    ]
+  }
+}
